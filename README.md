@@ -1,8 +1,8 @@
-# envdiffer: why doesn't it work anymore??
+# envreport: why doesn't it work anymore??
 
 Prepare reports on environments and report the differences between two environments.
 
-First and foremost, envdiffer produces a report on an environment in a diffable format.
+First and foremost, envreport produces a report on an environment in a diffable format.
 
 Inspired by [pyenvdiff](https://github.com/jnmclarty/pyenvdiff-lib), which appears to have gone unmaintained.
 

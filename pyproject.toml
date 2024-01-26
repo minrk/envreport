@@ -6,10 +6,10 @@ build-backend = "setuptools.build_meta"
 # Project metadata
 # ref: https://setuptools.pypa.io/en/latest/userguide/pyproject_config.html
 [project]
-name = "envdiffer"
+name = "envreport"
 version = "0.0.1.dev"
 dynamic = ["readme"]
-description = "envdiffer: compare environments"
+description = "envreport: compare environments"
 authors = [
   { name = "Min RK", email = "benjaminrk@gmail.com" },
 ]
@@ -28,8 +28,8 @@ classifiers = [
 ]
 
 [project.urls]
-Source = "https://github.com/minrk/envdiffer"
-Tracker = "https://github.com/minrk/envdiffer/issues"
+Source = "https://github.com/minrk/envreport"
+Tracker = "https://github.com/minrk/envreport/issues"
 
 [project.optional-dependencies]
 test = [
@@ -37,12 +37,12 @@ test = [
 ]
 
 [project.scripts]
-envdiffer = "envdiffer:main"
+envreport = "envreport:main"
 
 [tool.setuptools]
 zip-safe = false
 license-files = ["LICENSE"]
-py-modules = ["envdiffer"]
+py-modules = ["envreport"]
 packages = []
 
 # dynamic sources of metadata in other files
@@ -62,7 +62,7 @@ fallback_version = "0.0.0"
 #
 [tool.tbump]
 # Uncomment this if your project is hosted on GitHub:
-github_url = "https://github.com/minrk/envdiffer"
+github_url = "https://github.com/minrk/envreport"
 
 [tool.tbump.version]
 current = "0.0.1.dev"
@@ -94,13 +94,14 @@ src = "pyproject.toml"
 search = 'version = "{current_version}"'
 
 [[tool.tbump.file]]
-src = "envdiffer.py"
+src = "envreport.py"
 
 [tool.ruff.lint]
 ignore = [
     "F841", # unused variable
 ]
 select = [
+    "D1", # docstrings
     "E7", # comparisons
     "E9", # syntax
     "I", # isort
@@ -108,6 +109,9 @@ select = [
     "F", # flake8
 ]
 
+[tool.ruff.extend-per-file-ignores]
+"tests/*" = ["D"]
+
 [tool.pytest.ini_options]
-addopts = "--verbose --color=yes --durations=10 --cov=envdiffer"
+addopts = "--verbose --color=yes --durations=10 --cov=envreport"
 testpaths = ["tests"]
