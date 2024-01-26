@@ -19,6 +19,7 @@ from enum import IntEnum
 from fnmatch import fnmatch
 from pathlib import Path
 from shutil import which
+from textwrap import indent
 
 log = logging.getLogger("envreport")
 
@@ -62,6 +63,7 @@ class Collector:
     level: int
     name: str
     path: Path
+    details = False  # True to force <details> wrapper, e.g. low-priority info
 
     def __init__(self, path):
         """Construct collector for path"""
@@ -157,7 +159,7 @@ def collect_command_output(cmd, *popen_args, **popen_kwargs):
             stdout = stdout.decode("utf8")
             if stderr:
                 stdout += "\n" + stderr.decode("utf8")
-            return stdout
+            return stdout.rstrip("\n")
     except Exception as e:
         log.error(f"Error running {cmd}: {e}")
         return str(e)
@@ -205,6 +207,7 @@ class CondaInfoCollector(CommandCollector):
     level = Level.python
     name = "conda info"
     command = ["conda", "info"]
+    details = True
 
 
 class CondaListCollector(CommandCollector):
@@ -234,12 +237,47 @@ class CondaListCollector(CommandCollector):
         return False
 
 
-class UnameCollector(CommandCollector):
-    """Collect `uname -a`"""
+class SystemReportCollector(Collector):
+    """Collect some simple command output for info about the system"""
 
     level = Level.system
-    name = "uname"
-    command = ["uname", "-a"]
+    name = "system-report"
+    commands = [
+        ["hostname"],
+        ["uname", "-a"],
+    ]
+
+    def detect(self):
+        """Run if any of my commands can be found"""
+        for command in self.commands:
+            if which(command[0]):
+                return True
+        return False
+
+    def collect(self):
+        """Collect all command outputs"""
+        self.collected = {}
+        command_outputs = self.collected["commands"] = []
+        for command in self.commands:
+            if which(command[0]):
+                out = collect_command_output(command)
+                command_outputs.append(
+                    {
+                        "command": command,
+                        "output": out,
+                    }
+                )
+
+    def get_text_report(self):
+        """Collect each item"""
+        lines = []
+        for captured in self.collected["commands"]:
+            cmd_string = shlex.join(captured["command"])
+            output = captured["output"]
+            lines.append(f"$ {cmd_string}")
+            lines.append(indent(output, "  "))
+            lines.append("")
+        return "\n".join(lines[:-1])
 
 
 class AptCollector(CommandCollector):
@@ -247,6 +285,7 @@ class AptCollector(CommandCollector):
 
     level = Level.system_packages
     name = "apt-get"
+    details = True
 
     # TODO: yum equivalent
     # TODO: need to process or normalize output?
@@ -509,14 +548,14 @@ class EnvReport:
             lines.append("")
             text = collector.get_text_report()
             text = _squash_paths(text, path_replacements)
-            long_text = len(text) > 1024
-            if long_text:
+            details = collector.details or (len(text) > 1024)
+            if details:
                 lines.append("<details>")
                 lines.append("")
             lines.append("```")
             lines.append(text.rstrip())
             lines.append("```")
-            if long_text:
+            if details:
                 lines.append("")
                 lines.append("</details>")
             lines.append("")
