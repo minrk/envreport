@@ -64,6 +64,7 @@ class Collector:
     name: str
     path: Path
     details = False  # True to force <details> wrapper, e.g. low-priority info
+    plain_text_output = True  # if True, get_text_output is wrapped in a code fence
 
     def __init__(self, path):
         """Construct collector for path"""
@@ -302,6 +303,7 @@ class WhichCollector(Collector):
 
     level = Level.system
     name = "which"
+    plain_text_output = False
 
     commands = [
         "bash",
@@ -320,7 +322,7 @@ class WhichCollector(Collector):
     def get_text_report(self):
         """markdown list of each command path"""
         return "\n".join(
-            f"- {command}: {path}" for command, path in sorted(self.collected.items())
+            f"- {command}: `{path}`" for command, path in sorted(self.collected.items())
         )
 
 
@@ -552,9 +554,11 @@ class EnvReport:
             if details:
                 lines.append("<details>")
                 lines.append("")
-            lines.append("```")
+            if collector.plain_text_output:
+                lines.append("```")
             lines.append(text.rstrip())
-            lines.append("```")
+            if collector.plain_text_output:
+                lines.append("```")
             if details:
                 lines.append("")
                 lines.append("</details>")
