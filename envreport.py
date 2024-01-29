@@ -336,6 +336,28 @@ def _squash_paths(text, replacements):
     return text
 
 
+class LModCollector(Collector):
+    """Collect loaded LMod modules"""
+
+    level = Level.system
+    name = "modules"
+    plain_text_output = False
+
+    def detect(self):
+        """Only run if $LOADEDMODULES is defined"""
+        return bool(os.environ.get("LOADEDMODULES"))
+
+    def collect(self):
+        """Parse $LOADEDMODULES into a list"""
+        self.collected = {
+            "modules": os.environ["LOADEDMODULES"].split(os.pathsep),
+        }
+
+    def get_text_report(self):
+        """Report module list as a markdown list"""
+        return "\n".join(f"- `{name}`" for name in self.collected["modules"])
+
+
 class EnvCollector(Collector):
     """Collect environment variables"""
 
@@ -355,13 +377,19 @@ class EnvCollector(Collector):
         "LC_*",
     ]
 
+    ignored_env_patterns = [
+        "__*",
+    ]
+
     def collect(self):
         """Collect any environment variable that matches one of my patterns"""
         self.collected = {}
         for key in sorted(os.environ):
-            for pattern in self.env_patterns:
-                if fnmatch(key, pattern):
-                    self.collected[key] = os.environ[key]
+            if any(fnmatch(key, pattern) for pattern in self.env_patterns) and not any(
+                fnmatch(key, ignore_pattern)
+                for ignore_pattern in self.ignored_env_patterns
+            ):
+                self.collected[key] = os.environ[key]
 
     def get_text_report(self):
         """Simple env lines"""
