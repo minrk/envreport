@@ -365,9 +365,16 @@ class EnvCollector(Collector):
 
     def get_text_report(self):
         """Simple env lines"""
-        return "\n".join(
-            f"{key}={value}" for key, value in sorted(self.collected.items())
-        )
+        lines = []
+        # split PATH environment variables
+        for key, value in sorted(self.collected.items()):
+            lines.append(f"{key}={value}")
+            # split path-lists for nicer diff viewing
+            # leave the long line above for easier copy/paste
+            if "PATH" in key and os.pathsep in value:
+                for item in value.split(os.pathsep):
+                    lines.append(f"#  {item}")
+        return "\n".join(lines)
 
 
 class PythonSiteCollector(CommandCollector):
