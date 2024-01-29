@@ -64,6 +64,7 @@ class Collector:
     name: str
     path: Path
     details = False  # True to force <details> wrapper, e.g. low-priority info
+    plain_text_output = True  # if True, get_text_output is wrapped in a code fence
 
     def __init__(self, path):
         """Construct collector for path"""
@@ -302,6 +303,7 @@ class WhichCollector(Collector):
 
     level = Level.system
     name = "which"
+    plain_text_output = False
 
     commands = [
         "bash",
@@ -320,7 +322,7 @@ class WhichCollector(Collector):
     def get_text_report(self):
         """markdown list of each command path"""
         return "\n".join(
-            f"- {command}: {path}" for command, path in sorted(self.collected.items())
+            f"- {command}: `{path}`" for command, path in sorted(self.collected.items())
         )
 
 
@@ -332,6 +334,28 @@ def _squash_paths(text, replacements):
     for key, value in replacements:
         text = text.replace(value, f"${{{key}}}")
     return text
+
+
+class LModCollector(Collector):
+    """Collect loaded LMod modules"""
+
+    level = Level.system
+    name = "modules"
+    plain_text_output = False
+
+    def detect(self):
+        """Only run if $LOADEDMODULES is defined"""
+        return bool(os.environ.get("LOADEDMODULES"))
+
+    def collect(self):
+        """Parse $LOADEDMODULES into a list"""
+        self.collected = {
+            "modules": os.environ["LOADEDMODULES"].split(os.pathsep),
+        }
+
+    def get_text_report(self):
+        """Report module list as a markdown list"""
+        return "\n".join(f"- `{name}`" for name in self.collected["modules"])
 
 
 class EnvCollector(Collector):
@@ -353,19 +377,32 @@ class EnvCollector(Collector):
         "LC_*",
     ]
 
+    ignored_env_patterns = [
+        "__*",
+    ]
+
     def collect(self):
         """Collect any environment variable that matches one of my patterns"""
         self.collected = {}
         for key in sorted(os.environ):
-            for pattern in self.env_patterns:
-                if fnmatch(key, pattern):
-                    self.collected[key] = os.environ[key]
+            if any(fnmatch(key, pattern) for pattern in self.env_patterns) and not any(
+                fnmatch(key, ignore_pattern)
+                for ignore_pattern in self.ignored_env_patterns
+            ):
+                self.collected[key] = os.environ[key]
 
     def get_text_report(self):
         """Simple env lines"""
-        return "\n".join(
-            f"{key}={value}" for key, value in sorted(self.collected.items())
-        )
+        lines = []
+        # split PATH environment variables
+        for key, value in sorted(self.collected.items()):
+            lines.append(f"{key}={value}")
+            # split path-lists for nicer diff viewing
+            # leave the long line above for easier copy/paste
+            if "PATH" in key and os.pathsep in value:
+                for item in value.split(os.pathsep):
+                    lines.append(f"#  {item}")
+        return "\n".join(lines)
 
 
 class PythonSiteCollector(CommandCollector):
@@ -552,9 +589,11 @@ class EnvReport:
             if details:
                 lines.append("<details>")
                 lines.append("")
-            lines.append("```")
+            if collector.plain_text_output:
+                lines.append("```")
             lines.append(text.rstrip())
-            lines.append("```")
+            if collector.plain_text_output:
+                lines.append("```")
             if details:
                 lines.append("")
                 lines.append("</details>")
