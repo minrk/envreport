@@ -1,0 +1,65 @@
+name: Tests
+
+on:
+  pull_request:
+    paths-ignore:
+      - "docs/**"
+      - ".github/workflows/*.yaml"
+      - "!.github/workflows/test.yaml"
+  push:
+    paths-ignore:
+      - "docs/**"
+      - ".github/workflows/*.yaml"
+      - "!.github/workflows/test.yaml"
+    branches-ignore:
+      - "dependabot/**"
+      - "pre-commit-ci-update-config"
+    tags: ["**"]
+  workflow_dispatch:
+
+
+jobs:
+  test:
+    runs-on: ${{ matrix.runs-on || 'ubuntu-22.04' }}
+    timeout-minutes: 10
+
+    strategy:
+      # Keep running even if one variation of the job fail
+      fail-fast: false
+      matrix:
+        include:
+          - python: "3.6"
+            runs-on: ubuntu-20.04
+          - python: "3.6"
+            runs-on: macos-11
+          - python: "3.6"
+            runs-on: windows-2019
+          - python: "3.7"
+          - python: "3.8"
+          - python: "3.9"
+          - python: "3.10"
+          - python: "3.11"
+          - python: "3.12"
+            runs-on: ubuntu-latest
+          - python: "3.12"
+            runs-on: macos-latest
+          - python: "3.12"
+            runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "${{ matrix.python }}"
+
+      - name: Install Python dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install ".[test]"
+
+      - name: pip freeze
+        run: pip freeze
+
+      - name: Run tests
+        run: |
+          pytest
