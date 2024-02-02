@@ -23,6 +23,16 @@ from textwrap import indent
 
 log = logging.getLogger("envreport")
 
+try:
+    shlex_join = shlex.join
+except AttributeError:
+    # shlex.join is new in Python 3.8
+    import pipes
+
+    def shlex_join(cmd):
+        """Backport of shlex.join for Python < 3.8"""
+        return " ".join(pipes.quote(arg) for arg in cmd)
+
 
 class Level(IntEnum):
     """Level specifies sort-order of outputs"""
@@ -152,7 +162,7 @@ def collect_command_output(cmd, *popen_args, **popen_kwargs):
 
     popen_kwargs["stdout"] = subprocess.PIPE
     popen_kwargs.setdefault("stderr", subprocess.STDOUT)
-    cmd_s = shlex.join(cmd)
+    cmd_s = shlex_join(cmd)
     log.info(f"Collecting command output: `{cmd_s}`")
     try:
         with subprocess.Popen(cmd, *popen_args, **popen_kwargs) as p:
@@ -197,7 +207,7 @@ class CommandCollector(Collector):
 
     def get_text_report(self):
         """Nice representation of terminal output"""
-        cmd_string = shlex.join(self.collected["command"])
+        cmd_string = shlex_join(self.collected["command"])
         output = self.collected["output"]
         return f"$ {cmd_string}\n{output}"
 
@@ -273,7 +283,7 @@ class SystemReportCollector(Collector):
         """Collect each item"""
         lines = []
         for captured in self.collected["commands"]:
-            cmd_string = shlex.join(captured["command"])
+            cmd_string = shlex_join(captured["command"])
             output = captured["output"]
             lines.append(f"$ {cmd_string}")
             lines.append(indent(output, "  "))
