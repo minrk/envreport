@@ -34,6 +34,7 @@ Tracker = "https://github.com/minrk/envreport/issues"
 [project.optional-dependencies]
 test = [
   "pytest",
+  "pytest-cov",
 ]
 
 [project.scripts]
