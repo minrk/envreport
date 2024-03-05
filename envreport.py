@@ -346,11 +346,11 @@ def _squash_paths(text, replacements):
     return text
 
 
-class LModCollector(Collector):
-    """Collect loaded LMod modules"""
+class LmodCollector(Collector):
+    """Collect loaded Lmod modules"""
 
     level = Level.system
-    name = "modules"
+    name = "Lmod modules"
     plain_text_output = False
 
     def detect(self):
