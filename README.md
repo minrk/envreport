@@ -38,3 +38,14 @@ You can even run it e.g. in a running pod on kubernetes, as long as it has Pytho
 ```
 cat envreport.py | kubectl exec -i hub-5cfd767f85-q6wxs -- python3 > hub.md
 ```
+
+### one liner
+
+The convenient one liner (if you trust me):
+
+```
+curl https://raw.githubusercontent.com/minrk/envreport/HEAD/envreport.py | python3
+```
+
+Remember, piping files from the Internet to your shell is trusting the maintainers _and hosts_ of the repo to protect it from malicious code.
+But then again, so is `pip install`, really.
