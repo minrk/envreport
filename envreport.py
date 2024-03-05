@@ -6,7 +6,8 @@ diffable environment reports
 
 __version__ = "0.0.1.dev"
 
-
+import argparse
+import functools
 import json
 import logging
 import os
@@ -14,6 +15,7 @@ import shlex
 import subprocess
 import sys
 import warnings
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from enum import IntEnum
 from fnmatch import fnmatch
@@ -32,6 +34,34 @@ except AttributeError:
     def shlex_join(cmd):
         """Backport of shlex.join for Python < 3.8"""
         return " ".join(pipes.quote(arg) for arg in cmd)
+
+
+@contextmanager
+def _prefix_on_path(prefix, force=False):
+    """Context manager for inserting a $PREFIX onto $PATH
+
+    Only modifies $PATH runs if $(which python3) is not $PREFIX/bin/python3
+    """
+    path_before = os.environ["PATH"]
+    prefix_bin = prefix / "bin"
+    if not force and (which("python3") == str(prefix_bin / "python3")):
+        yield
+        return
+    log.info(f"Adding {prefix_bin} to front of $PATH")
+    os.environ["PATH"] = f"{prefix_bin}{os.pathsep}{path_before}"
+    try:
+        yield
+    finally:
+        os.environ["PATH"] = path_before
+
+
+@contextmanager
+def nullcontext():
+    """Backport contextlib.nullcontext for Python 3.6
+
+    Added in 3.7
+    """
+    yield
 
 
 class Level(IntEnum):
@@ -88,6 +118,18 @@ class Collector:
         No need to override if I should always run
         """
         return True
+
+    def _cached_collect(self):
+        """Cached caller of .collect()"""
+        if "_collect_cache" not in self.__class__.__dict__:
+            setattr(self.__class__, "_collect_cache", {})
+        cache = self.__class__._collect_cache
+        cache_key = (self.path, os.environ["PATH"])
+        if cache_key not in cache:
+            self.collect()
+            cache[cache_key] = self.collected
+        else:
+            self.collected = cache[cache_key]
 
     def collect(self):
         """Collect our information
@@ -163,7 +205,7 @@ def collect_command_output(cmd, *popen_args, **popen_kwargs):
     popen_kwargs["stdout"] = subprocess.PIPE
     popen_kwargs.setdefault("stderr", subprocess.STDOUT)
     cmd_s = shlex_join(cmd)
-    log.info(f"Collecting command output: `{cmd_s}`")
+    log.debug(f"Collecting command output: `{cmd_s}`")
     try:
         with subprocess.Popen(cmd, *popen_args, **popen_kwargs) as p:
             stdout, stderr = p.communicate()
@@ -434,6 +476,17 @@ class PipCollector(CommandCollector):
     command = ["python3", "-m", "pip", "list"]
 
 
+def _with_prefix(method):
+    """Decorator for running a method with $PREFIX/bin first on PATH"""
+
+    @functools.wraps(method)
+    def wrapped(self, *args, **kwargs):
+        with self._env_context:
+            return method(self, *args, **kwargs)
+
+    return wrapped
+
+
 class EnvReport:
     """
     An environment report
@@ -462,7 +515,11 @@ class EnvReport:
         """
         if path is None:
             path = discover_path()
-        self.path = Path(path)
+            self._env_context = nullcontext()
+        else:
+            path = Path(path)
+            self._env_context = _prefix_on_path(path)
+        self.path = path
         self._discover_collectors()
 
     def _discover_collectors(self):
@@ -482,6 +539,7 @@ class EnvReport:
             ):
                 collectors[obj.name] = obj
 
+    @_with_prefix
     def collect(self):
         """Run all collectors"""
         self.collect_date = datetime.now(timezone.utc).isoformat()
@@ -492,10 +550,10 @@ class EnvReport:
             try:
                 collector = collector_class(path=self.path)
                 if not collector.detect():
-                    log.info(f"Not collecting {collector.name}")
+                    log.debug(f"Not collecting {collector.name}")
                     continue
                 log.info(f"Collecting {collector.name}")
-                collector.collect()
+                collector._cached_collect()
             except Exception:
                 log.exception(f"Error in {collector.name} collector")
             self.collectors[collector.name] = collector
@@ -506,7 +564,7 @@ class EnvReport:
         Round-trip with .from_dict()
         """
         return {
-            "path": self.path,
+            "path": str(self.path),
             "collect_date": self.collect_date,
             "envreport_version": self.envreport_version,
             "collectors": {
@@ -520,7 +578,7 @@ class EnvReport:
         format can be 'markdown' or 'json'.
         If format is unspecified,
         guess based on file extension,
-        which will be 'json' if extensin is `.json`, otherwise mardkwon.
+        which will be 'json' if extensin is `.json`, otherwise markdown.
         """
         path = Path(path)
         if format is None:
@@ -629,22 +687,140 @@ def discover_path():
         path_prefix = subprocess.check_output(
             ["python3", "-c", "import sys; sys.stdout.write(sys.prefix)"]
         ).decode("utf8", "replace")
-        return path_prefix
+        return Path(path_prefix)
     except Exception as e:
         log.error(f"Failed to get sys.prefix from python3 on $PATH: {e}")
-        return sys.prefix
+        return Path(sys.prefix)
 
 
 def main():
     """main entrypoint"""
+    parser = _make_arg_parser()
+    args = parser.parse_args(sys.argv[1:])
 
-    # TODO: command-line options
-    # e.g. format, output, path
-    logging.basicConfig(level=logging.INFO)
-    path = discover_path()
+    logging.basicConfig(level=args.log_level, format="[%(levelname)s] %(message)s")
+    path = None
+    if args.prefix:
+        path = args.prefix
     reporter = EnvReport(path)
     reporter.collect()
-    print(reporter.text_report())
+    if args.format == "markdown":
+        report = reporter.text_report()
+    elif args.format == "json":
+        report = reporter.json_report()
+    else:
+        raise ValueError(f"Invalid format: {args.format}")
+    print(report)
+
+
+def _make_arg_parser(**kwargs):
+    """Construct teh ArgumentParser
+
+    shared by %envreport magic and cli
+    """
+    parser = argparse.ArgumentParser(description=__doc__, **kwargs)
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_const",
+        dest="log_level",
+        const=logging.DEBUG,
+        default=logging.INFO,
+        help="More verbose logging output",
+    )
+    parser.add_argument(
+        "-q",
+        "--quiet",
+        action="store_const",
+        dest="log_level",
+        const=logging.ERROR,
+        help="Less verbose logging output",
+    )
+    parser.add_argument(
+        "-f",
+        "--format",
+        choices=["markdown", "json"],
+        default="markdown",
+        help="Format to render output",
+    )
+    parser.add_argument(
+        "prefix",
+        nargs="?",
+        help="The environment prefix to report on. Default: use $PATH",
+    )
+    return parser
+
+
+def _envreport_magic(line):
+    """
+    Produce and display an environment report
+
+    usage: %envreport [-v] [-q] [-f {markdown,json}] [--plain] [prefix]
+
+    envreport diffable environment reports
+
+    positional arguments:
+      prefix                The environment prefix to report on. Default: use
+                            $PATH
+
+    options:
+      -v, --verbose         More verbose logging output
+      -q, --quiet           Less verbose logging output
+      -f {markdown,json}, --format {markdown,json}
+                            Format to render output
+      --plain               Force plain text output (default in terminals)
+    """
+    import shlex
+
+    from IPython import get_ipython
+    from IPython.display import JSON, Markdown, display
+
+    parser = _make_arg_parser(add_help=False)
+    parser.prog = "%envreport"
+
+    parser.add_argument(
+        "--plain",
+        action="store_true",
+        help="Force plain text output (default in terminals)",
+    )
+    # parser.print_help() to produce docstring
+    try:
+        args = parser.parse_args(shlex.split(line.strip()))
+    except SystemExit:
+        # suppress SystemExit, e.g. from `-h`
+        return
+    plain = args.plain
+    if not args.plain:
+        plain = not getattr(get_ipython(), "kernel", None)
+    prefix = args.prefix or sys.prefix
+    reporter = EnvReport(prefix)
+    reporter.collect()
+    if args.format == "markdown":
+        report = reporter.text_report()
+        if plain:
+            print(report)
+        else:
+            display(Markdown(report))
+    elif args.format == "json":
+        if plain:
+            print(reporter.json_report())
+        else:
+            display(JSON(reporter.to_dict()))
+
+
+def load_ipython_extension(ip):
+    """Register %envreport magic"""
+    log.setLevel(logging.INFO)
+    if getattr(ip, "kernel", None):
+        # log to stdout in a kernel
+        log_stream = sys.stdout
+    else:
+        # log to stderr in the terminal
+        log_stream = sys.stderr
+    log.addHandler(logging.StreamHandler(log_stream))
+    log.propagate = False
+
+    ip.register_magic_function(_envreport_magic, magic_name="envreport")
 
 
 if __name__ == "__main__":
