@@ -39,6 +39,15 @@ You can even run it e.g. in a running pod on kubernetes, as long as it has Pytho
 cat envreport.py | kubectl exec -i hub-5cfd767f85-q6wxs -- python3 > hub.md
 ```
 
+### `%envreport` magic
+
+You can use `%envreport` in IPython:
+
+```
+%load_ext envreport
+%envreport
+```
+
 ### one liner
 
 The convenient one liner (if you trust me):
