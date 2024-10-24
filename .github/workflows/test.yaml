@@ -30,8 +30,8 @@ jobs:
         include:
           - python: "3.6"
             runs-on: ubuntu-20.04
-          - python: "3.6"
-            runs-on: macos-11
+          - python: "3.7"
+            runs-on: macos-12
           - python: "3.6"
             runs-on: windows-2019
           - python: "3.7"
