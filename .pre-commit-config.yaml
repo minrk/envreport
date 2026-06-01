@@ -16,7 +16,7 @@ ci:
 repos:
   # autoformat and lint Python code
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.6.9
+    rev: v0.15.12
     hooks:
       - id: ruff
         types_or: [python, jupyter]
@@ -25,7 +25,7 @@ repos:
         types_or: [python, jupyter]
 
   - repo: https://github.com/executablebooks/mdformat
-    rev: 0.7.17
+    rev: 1.0.0
     hooks:
     - id: mdformat
       additional_dependencies:
@@ -34,7 +34,7 @@ repos:
 
   # Autoformat and linting, misc. details
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v6.0.0
     hooks:
       - id: end-of-file-fixer
       - id: requirements-txt-fixer
