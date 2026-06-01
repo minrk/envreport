@@ -254,16 +254,28 @@ class CommandCollector(Collector):
         return f"$ {cmd_string}\n{output}"
 
 
-class CondaInfoCollector(CommandCollector):
+class _CondaCollector(CommandCollector):
+    @property
+    def conda_exe(self):
+        if which("mamba"):
+            return "mamba"
+        return "conda"
+
+    @property
+    def command(self):
+        return [self.conda_exe, *self.conda_command]
+
+
+class CondaInfoCollector(_CondaCollector):
     """Collect `conda info`"""
 
     level = Level.python
     name = "conda info"
-    command = ["conda", "info"]
+    conda_command = ["info"]
     details = True
 
 
-class CondaListCollector(CommandCollector):
+class CondaListCollector(_CondaCollector):
     """
     Collect conda package list with `conda --list`
 
@@ -274,11 +286,11 @@ class CondaListCollector(CommandCollector):
     name = "conda list"
     # TODO: normalize output
 
-    command = ["conda", "list"]
+    conda_command = ["list"]
 
     def detect(self):
         """Only run this if we are in a conda environment"""
-        if not which("conda"):
+        if not which(self.conda_exe):
             return False
         if os.environ.get("CONDA_PREFIX") == self.path:
             return True
